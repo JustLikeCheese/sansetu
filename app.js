@@ -7,7 +7,6 @@
 
   // ---------- 常量 ----------
   const KEYS = ['a', 'b', 'c', 'ab', 'ac', 'bc', 'abc'];
-  const NAMES = { a: '上圆', b: '左圆', c: '右圆', ab: '上∩左', ac: '上∩右', bc: '左∩右', abc: '中心' };
   const MASK = { a: 1, b: 2, c: 4, ab: 3, ac: 5, bc: 6, abc: 7 };
   const AXIS = { a: -90, b: 150, c: 30, ab: 210, ac: -30, bc: 90 };
   const LINE_H = 1.15;
@@ -15,34 +14,57 @@
   // GIF 帧延时以 1/100 秒计，很多播放器会把过短的延时（如 50 帧/秒的 2/100 秒）拉慢，所以最高 25 帧
   const FPS = [10, 15, 20, 25];
   const STORE_KEY = 'sansetu:v1';
+  const LANG_KEY = 'sansetu:lang';
 
   const GF = 'https://fonts.googleapis.com/css2?family=';
   const FONTS = {
-    sans: { name: '思源黑体', family: 'Noto Sans SC', css: GF + 'Noto+Sans+SC:wght@400;700&display=swap', fallback: '"Source Han Sans SC","PingFang SC","Microsoft YaHei",sans-serif' },
-    serif: { name: '思源宋体', family: 'Noto Serif SC', css: GF + 'Noto+Serif+SC:wght@400;700&display=swap', fallback: '"Source Han Serif SC","Songti SC","SimSun",serif' },
-    kuaile: { name: '站酷快乐体', family: 'ZCOOL KuaiLe', css: GF + 'ZCOOL+KuaiLe&display=swap', fallback: '"PingFang SC","Microsoft YaHei",sans-serif' },
-    xiaowei: { name: '站酷小薇', family: 'ZCOOL XiaoWei', css: GF + 'ZCOOL+XiaoWei&display=swap', fallback: '"Songti SC","SimSun",serif' },
-    mashan: { name: '马善政毛笔', family: 'Ma Shan Zheng', css: GF + 'Ma+Shan+Zheng&display=swap', fallback: '"KaiTi","STKaiti",serif' },
-    longcang: { name: '龙藏手写', family: 'Long Cang', css: GF + 'Long+Cang&display=swap', fallback: '"KaiTi","STKaiti",serif' },
-    system: { name: '系统默认字体', family: null, css: null, fallback: 'system-ui,"PingFang SC","Microsoft YaHei",sans-serif' },
+    sans: { family: 'Noto Sans SC', css: GF + 'Noto+Sans+SC:wght@400;700&display=swap', fallback: '"Source Han Sans SC","PingFang SC","Microsoft YaHei",sans-serif' },
+    sansTC: { family: 'Noto Sans TC', css: GF + 'Noto+Sans+TC:wght@400;700&display=swap', fallback: '"Source Han Sans TC","PingFang TC","Microsoft JhengHei",sans-serif' },
+    sansJP: { family: 'Noto Sans JP', css: GF + 'Noto+Sans+JP:wght@400;700&display=swap', fallback: '"Hiragino Sans","Yu Gothic","Meiryo",sans-serif' },
+    serif: { family: 'Noto Serif SC', css: GF + 'Noto+Serif+SC:wght@400;700&display=swap', fallback: '"Source Han Serif SC","Songti SC","SimSun",serif' },
+    kuaile: { family: 'ZCOOL KuaiLe', css: GF + 'ZCOOL+KuaiLe&display=swap', fallback: '"PingFang SC","Microsoft YaHei",sans-serif' },
+    xiaowei: { family: 'ZCOOL XiaoWei', css: GF + 'ZCOOL+XiaoWei&display=swap', fallback: '"Songti SC","SimSun",serif' },
+    mashan: { family: 'Ma Shan Zheng', css: GF + 'Ma+Shan+Zheng&display=swap', fallback: '"KaiTi","STKaiti",serif' },
+    longcang: { family: 'Long Cang', css: GF + 'Long+Cang&display=swap', fallback: '"KaiTi","STKaiti",serif' },
+    system: { family: null, css: null, fallback: 'system-ui,"PingFang SC","Microsoft YaHei",sans-serif' },
   };
+
+  // ---------- 多语言 ----------
+  const storageGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const storageSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* 无痕模式等 */ } };
+
+  function detectLang() {
+    const q = new URLSearchParams(location.search).get('lang');
+    for (const c of [q, storageGet(LANG_KEY), ...(navigator.languages || [navigator.language])]) {
+      const m = I18N.match(c);
+      if (m) return m;
+    }
+    return 'en';
+  }
+  let lang = detectLang();
+
+  function t(key, params) {
+    const msg = (I18N.messages[lang] || {})[key] ?? I18N.messages.en[key] ?? key;
+    return params ? msg.replace(/\{(\w+)\}/g, (m, k) => (params[k] ?? m)) : msg;
+  }
+  const textPresets = () => I18N.presets[lang];
   const fontStack = key => {
     const f = FONTS[key] || FONTS.sans;
     return (f.family ? `"${f.family}",` : '') + f.fallback;
   };
 
-  const region = (text, fill, color, size, bold = false, [dx, dy] = [0, 0]) => ({ text, fill, color, size, bold, dx, dy });
+  const region = (fill, color) => ({ text: '', fill, color, size: 104, bold: false, dx: 0, dy: 0 });
   // 原图文字是手工摆放的，略偏离对称位置，这里还原出来
   const ORIGINAL_OFFSETS = [[13, -2], [9, 0], [5, 0], [-4, -3], [6, -3], [-2, -2], [7, 2]];
-  const DEFAULTS = {
+  const BASE = {
     regions: {
-      a: region('稳定', '#da3e41', '#000000', 104, false, ORIGINAL_OFFSETS[0]),
-      b: region('速度', '#efe84d', '#000000', 104, false, ORIGINAL_OFFSETS[1]),
-      c: region('便宜', '#53b0db', '#000000', 104, false, ORIGINAL_OFFSETS[2]),
-      ab: region('贵', '#ec9e3b', '#ffffff', 104, false, ORIGINAL_OFFSETS[3]),
-      ac: region('慢', '#7766a7', '#ffffff', 104, false, ORIGINAL_OFFSETS[4]),
-      bc: region('差', '#299c7b', '#ffffff', 104, false, ORIGINAL_OFFSETS[5]),
-      abc: region('滚', '#37363a', '#ffffff', 132, true, ORIGINAL_OFFSETS[6]),
+      a: region('#da3e41', '#000000'),
+      b: region('#efe84d', '#000000'),
+      c: region('#53b0db', '#000000'),
+      ab: region('#ec9e3b', '#ffffff'),
+      ac: region('#7766a7', '#ffffff'),
+      bc: region('#299c7b', '#ffffff'),
+      abc: region('#37363a', '#ffffff'),
     },
     radius: 299,
     gap: 100,
@@ -61,22 +83,28 @@
     anim: { turns: 2, dir: 1, spin: 1.6, hold: 1.2, easing: 'outCubic', center: 'pop', upright: false, fps: 25, size: 360, loop: true },
   };
 
-  // 文案预设：[上, 左, 右, 上∩左, 上∩右, 左∩右, 中心]，字号同序
-  const TEXT_PRESETS = [
-    { name: '稳定·速度·便宜', t: ['稳定', '速度', '便宜', '贵', '慢', '差', '滚'], s: [104, 104, 104, 104, 104, 104, 132], o: ORIGINAL_OFFSETS },
-    { name: '钱多·事少·离家近', t: ['钱多', '事少', '离家近', '远', '累', '穷', '做梦'], s: [92, 92, 84, 104, 104, 104, 100] },
-    { name: '学习·睡觉·社交', t: ['学习', '睡觉', '社交', '孤独', '熬夜', '挂科', '做梦'], s: [104, 104, 104, 72, 72, 72, 100] },
-    { name: '好·快·便宜', t: ['好', '快', '便宜', '贵', '慢', '烂', '做梦'], s: [120, 120, 104, 104, 104, 104, 100] },
-    { name: '有钱·好看·专一', t: ['有钱', '好看', '专一', '渣', '丑', '穷', '醒醒'], s: [104, 104, 104, 104, 104, 104, 100] },
-  ];
+  function applyTextPreset(st, p) {
+    KEYS.forEach((k, i) => {
+      const [dx, dy] = p.original ? ORIGINAL_OFFSETS[i] : [0, 0];
+      Object.assign(st.regions[k], { text: p.t[i], size: p.s[i], dx, dy, bold: k === 'abc' });
+    });
+  }
+
+  // 默认图：用当前语言的第一套文案
+  function defaults() {
+    const st = clone(BASE);
+    applyTextPreset(st, textPresets()[0]);
+    st.font = I18N.defaultFont[lang] || 'sans';
+    return st;
+  }
 
   // 配色预设：底色 / 字色（同 KEYS 顺序）/ 背景
   const COLOR_PRESETS = [
-    { name: '原版', fill: ['#da3e41', '#efe84d', '#53b0db', '#ec9e3b', '#7766a7', '#299c7b', '#37363a'], color: ['#000000', '#000000', '#000000', '#ffffff', '#ffffff', '#ffffff', '#ffffff'], bg: '#ffffff' },
-    { name: '马卡龙', fill: ['#ffadb5', '#ffe79a', '#9fd3f5', '#f5a15e', '#9b83d9', '#5fbf94', '#ef5d7f'], color: ['#4a3b3b', '#4a3b3b', '#4a3b3b', '#ffffff', '#ffffff', '#ffffff', '#ffffff'], bg: '#fffaf4' },
-    { name: '霓虹', fill: ['#ff2e63', '#f9ed69', '#08d9d6', '#ff8c42', '#9d4edd', '#2ec27e', '#ffffff'], color: ['#111111', '#111111', '#111111', '#111111', '#ffffff', '#111111', '#111111'], bg: '#15151f' },
-    { name: '莫兰迪', fill: ['#c9a3a0', '#dccfae', '#9fb2bf', '#b88a73', '#8d88a6', '#7f9a82', '#4f4a4a'], color: ['#3b3434', '#3b3434', '#3b3434', '#ffffff', '#ffffff', '#ffffff', '#ffffff'], bg: '#f3f0ea' },
-    { name: '黑白', fill: ['#e8e8e8', '#c4c4c4', '#a0a0a0', '#7a7a7a', '#5c5c5c', '#444444', '#111111'], color: ['#111111', '#111111', '#111111', '#ffffff', '#ffffff', '#ffffff', '#ffffff'], bg: '#ffffff' },
+    { name: 'colorOriginal', fill: ['#da3e41', '#efe84d', '#53b0db', '#ec9e3b', '#7766a7', '#299c7b', '#37363a'], color: ['#000000', '#000000', '#000000', '#ffffff', '#ffffff', '#ffffff', '#ffffff'], bg: '#ffffff' },
+    { name: 'colorMacaron', fill: ['#ffadb5', '#ffe79a', '#9fd3f5', '#f5a15e', '#9b83d9', '#5fbf94', '#ef5d7f'], color: ['#4a3b3b', '#4a3b3b', '#4a3b3b', '#ffffff', '#ffffff', '#ffffff', '#ffffff'], bg: '#fffaf4' },
+    { name: 'colorNeon', fill: ['#ff2e63', '#f9ed69', '#08d9d6', '#ff8c42', '#9d4edd', '#2ec27e', '#ffffff'], color: ['#111111', '#111111', '#111111', '#111111', '#ffffff', '#111111', '#111111'], bg: '#15151f' },
+    { name: 'colorMorandi', fill: ['#c9a3a0', '#dccfae', '#9fb2bf', '#b88a73', '#8d88a6', '#7f9a82', '#4f4a4a'], color: ['#3b3434', '#3b3434', '#3b3434', '#ffffff', '#ffffff', '#ffffff', '#ffffff'], bg: '#f3f0ea' },
+    { name: 'colorMono', fill: ['#e8e8e8', '#c4c4c4', '#a0a0a0', '#7a7a7a', '#5c5c5c', '#444444', '#111111'], color: ['#111111', '#111111', '#111111', '#ffffff', '#ffffff', '#ffffff', '#ffffff'], bg: '#ffffff' },
   ];
 
   // ---------- 工具 ----------
@@ -134,6 +162,7 @@
   // 旧版本保存的非法值（比如已移除的 50 帧/秒）改成最接近的可用值
   function normalize(st) {
     if (!FPS.includes(st.anim.fps)) st.anim.fps = FPS.reduce((a, b) => (Math.abs(b - st.anim.fps) < Math.abs(a - st.anim.fps) ? b : a));
+    if (!FONTS[st.font]) st.font = defaults().font;
     return st;
   }
 
@@ -141,16 +170,16 @@
     const m = location.hash.match(/^#s=([\w-]+)/);
     if (m) {
       try {
-        const st = merge(clone(DEFAULTS), decodeState(m[1]));
+        const st = merge(defaults(), decodeState(m[1]));
         history.replaceState(null, '', location.pathname + location.search);
         return normalize(st);
       } catch (e) { /* 链接损坏则忽略 */ }
     }
     try {
-      const raw = localStorage.getItem(STORE_KEY);
-      if (raw) return normalize(merge(clone(DEFAULTS), JSON.parse(raw)));
-    } catch (e) { /* 无痕模式等 */ }
-    return clone(DEFAULTS);
+      const raw = storageGet(STORE_KEY);
+      if (raw) return normalize(merge(defaults(), JSON.parse(raw)));
+    } catch (e) { /* 数据损坏则忽略 */ }
+    return defaults();
   }
 
   let state = loadInitial();
@@ -159,9 +188,7 @@
   let saveTimer = 0;
   function saveSoon() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* 忽略 */ }
-    }, 300);
+    saveTimer = setTimeout(() => storageSet(STORE_KEY, JSON.stringify(state)), 300);
   }
 
   // ---------- 几何 ----------
@@ -494,15 +521,13 @@
     updatePlayBtn();
     requestRender();
   }
-  function updatePlayBtn() { $('#playBtn').textContent = playing ? '暂停' : '播放'; }
+  function updatePlayBtn() { $('#playBtn').textContent = t(playing ? 'pause' : 'play'); }
 
   function setMode(m) {
     mode = m;
     $$('.seg [data-mode]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
     $('#playBtn').hidden = m !== 'anim';
-    $('#hint').textContent = m === 'static'
-      ? '拖动图上的文字可以微调位置，双击文字直接修改'
-      : '这里是动图的实时预览；点「生成 GIF 动图」得到可以保存的表情包';
+    $('#hint').textContent = t(m === 'static' ? 'hintStatic' : 'hintAnim');
     hover = null;
     view.style.cursor = '';
     if (m === 'anim') play();
@@ -602,38 +627,41 @@
 
   const SLIDERS = {
     circleSliders: [
-      { k: 'radius', label: '圆圈半径', min: 60, max: 600, step: 1, unit: 'px' },
-      { k: 'gap', label: '圆心距离', min: 30, max: 200, step: 1, unit: '%' },
-      { k: 'scale.a', label: '上圆大小', min: 40, max: 160, step: 1, unit: '%' },
-      { k: 'scale.b', label: '左圆大小', min: 40, max: 160, step: 1, unit: '%' },
-      { k: 'scale.c', label: '右圆大小', min: 40, max: 160, step: 1, unit: '%' },
-      { k: 'strokeWidth', label: '圆圈描边', min: 0, max: 40, step: 1, unit: 'px' },
+      { k: 'radius', label: 'radius', min: 60, max: 600, step: 1, unit: 'px' },
+      { k: 'gap', label: 'gap', min: 30, max: 200, step: 1, unit: '%' },
+      { k: 'scale.a', label: 'scaleA', min: 40, max: 160, step: 1, unit: '%' },
+      { k: 'scale.b', label: 'scaleB', min: 40, max: 160, step: 1, unit: '%' },
+      { k: 'scale.c', label: 'scaleC', min: 40, max: 160, step: 1, unit: '%' },
+      { k: 'strokeWidth', label: 'strokeWidth', min: 0, max: 40, step: 1, unit: 'px' },
     ],
     textSliders: [
-      { k: 'textScale', label: '整体字号', min: 30, max: 250, step: 1, unit: '%' },
-      { k: 'textStrokeWidth', label: '文字描边', min: 0, max: 30, step: 0.5, unit: 'px' },
+      { k: 'textScale', label: 'textScale', min: 30, max: 250, step: 1, unit: '%' },
+      { k: 'textStrokeWidth', label: 'textStrokeWidth', min: 0, max: 30, step: 0.5, unit: 'px' },
     ],
     canvasSliders: [
-      { k: 'padding', label: '画布边距', min: 0, max: 300, step: 1, unit: 'px' },
+      { k: 'padding', label: 'padding', min: 0, max: 300, step: 1, unit: 'px' },
     ],
     animSliders: [
-      { k: 'anim.turns', label: '转几圈', min: 1, max: 10, step: 1, unit: '圈' },
-      { k: 'anim.spin', label: '旋转时长', min: 0.3, max: 6, step: 0.1, unit: '秒' },
-      { k: 'anim.hold', label: '停顿时长', min: 0, max: 6, step: 0.1, unit: '秒' },
-      { k: 'anim.size', label: 'GIF 尺寸', min: 64, max: 1024, step: 8, unit: 'px' },
+      { k: 'anim.turns', label: 'turns', min: 1, max: 10, step: 1, unit: 'unitTurns' },
+      { k: 'anim.spin', label: 'spin', min: 0.3, max: 6, step: 0.1, unit: 'unitSec' },
+      { k: 'anim.hold', label: 'hold', min: 0, max: 6, step: 0.1, unit: 'unitSec' },
+      { k: 'anim.size', label: 'gifSize', min: 64, max: 1024, step: 8, unit: 'px' },
     ],
   };
 
+  // 动态生成的控件；切换语言时整体重建（数值都从 state 同步回来）
   function mountSliders() {
     for (const [id, list] of Object.entries(SLIDERS)) {
       const host = document.getElementById(id);
+      host.textContent = '';
       for (const s of list) {
+        const label = t(s.label), unit = s.unit === 'px' || s.unit === '%' ? s.unit : t(s.unit);
         const row = document.createElement('div');
         row.className = 'ctl';
         const attrs = `data-k="${s.k}" min="${s.min}" max="${s.max}" step="${s.step}"`;
-        row.innerHTML = `<span class="ctl-label">${s.label}</span>`
-          + `<input type="range" ${attrs} aria-label="${s.label}">`
-          + `<span class="ctl-num"><input type="number" ${attrs} aria-label="${s.label}数值"><i>${s.unit}</i></span>`;
+        row.innerHTML = `<span class="ctl-label">${esc(label)}</span>`
+          + `<input type="range" ${attrs} aria-label="${esc(label)}">`
+          + `<span class="ctl-num"><input type="number" ${attrs} aria-label="${esc(t('ariaValue', { label }))}"><i>${esc(unit)}</i></span>`;
         host.appendChild(row);
       }
     }
@@ -641,25 +669,112 @@
 
   function mountRegions() {
     const host = $('#regionRows');
+    host.textContent = '';
     for (const k of KEYS) {
+      const name = t('region_' + k);
+      const a = key => esc(t(key, { name }));
       const row = document.createElement('div');
       row.className = 'region-row';
       row.innerHTML = `
-        <input type="color" class="swatch" data-k="regions.${k}.fill" title="${NAMES[k]}底色" aria-label="${NAMES[k]}底色">
-        <span class="rname">${NAMES[k]}</span>
-        <textarea rows="1" data-k="regions.${k}.text" aria-label="${NAMES[k]}文字" spellcheck="false"></textarea>
-        <input type="color" class="swatch round" data-k="regions.${k}.color" title="${NAMES[k]}文字颜色" aria-label="${NAMES[k]}文字颜色">
-        <input type="number" class="num" data-k="regions.${k}.size" min="4" max="1000" step="1" title="字号" aria-label="${NAMES[k]}字号">
-        <label class="tog" title="加粗"><input type="checkbox" data-k="regions.${k}.bold" aria-label="${NAMES[k]}加粗"><span>B</span></label>`;
+        <input type="color" class="swatch" data-k="regions.${k}.fill" title="${a('ariaFill')}" aria-label="${a('ariaFill')}">
+        <span class="rname">${esc(name)}</span>
+        <textarea rows="1" data-k="regions.${k}.text" aria-label="${a('ariaText')}" spellcheck="false"></textarea>
+        <input type="color" class="swatch round" data-k="regions.${k}.color" title="${a('ariaTextColor')}" aria-label="${a('ariaTextColor')}">
+        <input type="number" class="num" data-k="regions.${k}.size" min="4" max="1000" step="1" title="${esc(t('titleSize'))}" aria-label="${a('ariaSize')}">
+        <label class="tog" title="${esc(t('titleBold'))}"><input type="checkbox" data-k="regions.${k}.bold" aria-label="${a('ariaBold')}"><span>B</span></label>`;
       host.appendChild(row);
     }
   }
 
+  function fillSelect(sel, items) {
+    sel.textContent = '';
+    for (const [value, label] of items) sel.add(new Option(label, String(value)));
+  }
+
   function mountSelects() {
-    const fs = $('#fontSelect');
-    for (const [key, f] of Object.entries(FONTS)) fs.add(new Option(f.name, key));
-    const es = $('#exportScale');
-    for (const v of [0.5, 1, 2, 3, 4]) es.add(new Option(`${v}x`, String(v)));
+    fillSelect($('#fontSelect'), Object.keys(FONTS).map(k => [k, t('font_' + k)]));
+    fillSelect($('#fpsSelect'), FPS.map(n => [n, t('fpsOption', { n }) + (n === FPS[0] ? t('fpsSmall') : n === FPS[FPS.length - 1] ? t('fpsSmooth') : '')]));
+    fillSelect($('#exportScale'), [0.5, 1, 2, 3, 4].map(v => [v, `${v}x`]));
+  }
+
+  function mountPresets() {
+    const tp = $('#textPresets');
+    tp.textContent = '';
+    textPresets().forEach(p => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.textContent = p.name;
+      b.addEventListener('click', () => {
+        applyTextPreset(state, p);
+        syncControls();
+        changed('text');
+      });
+      tp.appendChild(b);
+    });
+
+    const cp = $('#colorPresets');
+    cp.textContent = '';
+    const addColorChip = (name, fills, onClick) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      const dots = document.createElement('span');
+      dots.className = 'dots';
+      fills.forEach(c => { const i = document.createElement('i'); i.style.background = c; dots.appendChild(i); });
+      b.append(dots, document.createTextNode(name));
+      b.addEventListener('click', onClick);
+      cp.appendChild(b);
+      return b;
+    };
+    COLOR_PRESETS.forEach(p => addColorChip(t(p.name), p.fill.slice(0, 3), () => {
+      KEYS.forEach((k, i) => Object.assign(state.regions[k], { fill: p.fill[i], color: p.color[i] }));
+      state.bg = p.bg;
+      syncControls();
+      changed('color');
+    }));
+    const rnd = addColorChip(t('colorRandom'), ['#999', '#bbb', '#ddd'], () => {
+      randomColors();
+      syncControls();
+      changed('color');
+      rnd.querySelectorAll('.dots i').forEach((d, i) => { d.style.background = state.regions[KEYS[i]].fill; });
+    });
+  }
+
+  // 静态文案：data-i18n → 文本，data-i18n-aria / -alt → 对应属性
+  function applyStaticText() {
+    document.documentElement.lang = lang;
+    document.title = t('title');
+    $('meta[name="description"]').setAttribute('content', t('description'));
+    for (const el of $$('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+    for (const el of $$('[data-i18n-aria]')) el.setAttribute('aria-label', t(el.dataset.i18nAria));
+    for (const el of $$('[data-i18n-alt]')) el.alt = t(el.dataset.i18nAlt);
+    $('#langSelect').value = lang;
+    $('#hint').textContent = t(mode === 'static' ? 'hintStatic' : 'hintAnim');
+    updatePlayBtn();
+    if (gifInfo) $('#gifMeta').textContent = t('gifMeta', gifInfo);
+  }
+
+  function buildUI() {
+    applyStaticText();
+    mountSliders();
+    mountRegions();
+    mountSelects();
+    mountPresets();
+    syncControls();
+  }
+
+  function setLang(next) {
+    if (next === lang || !I18N.messages[next]) return;
+    // 图上还是某套预设文案（没改过）时，换成新语言里对应的那一套
+    const i = textPresets().findIndex(p => KEYS.every((k, j) => state.regions[k].text === p.t[j]));
+    const oldFont = I18N.defaultFont[lang];
+    lang = next;
+    storageSet(LANG_KEY, lang);
+    if (i >= 0) applyTextPreset(state, textPresets()[i]);
+    if (state.font === oldFont) state.font = I18N.defaultFont[lang] || state.font;
+    buildUI();
+    changed('text');
   }
 
   function fitTextarea(el) { el.rows = clamp(el.value.split('\n').length, 1, 4); }
@@ -705,59 +820,7 @@
     changed(k);
   }
 
-  // ---------- 预设 ----------
-  function mountPresets() {
-    const tp = $('#textPresets');
-    TEXT_PRESETS.forEach(p => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'chip';
-      b.textContent = p.name;
-      b.addEventListener('click', () => {
-        KEYS.forEach((k, i) => {
-          const [dx, dy] = p.o ? p.o[i] : [0, 0];
-          Object.assign(state.regions[k], { text: p.t[i], size: p.s[i], dx, dy });
-        });
-        state.regions.abc.bold = true;
-        syncControls();
-        changed('text');
-      });
-      tp.appendChild(b);
-    });
-
-    const cp = $('#colorPresets');
-    const addColorChip = (name, fills, onClick) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'chip';
-      const dots = document.createElement('span');
-      dots.className = 'dots';
-      fills.forEach(c => { const i = document.createElement('i'); i.style.background = c; dots.appendChild(i); });
-      b.append(dots, document.createTextNode(name));
-      b.addEventListener('click', onClick);
-      cp.appendChild(b);
-      return b;
-    };
-    COLOR_PRESETS.forEach(p => addColorChip(p.name, p.fill.slice(0, 3), () => {
-      KEYS.forEach((k, i) => Object.assign(state.regions[k], { fill: p.fill[i], color: p.color[i] }));
-      state.bg = p.bg;
-      syncControls();
-      changed('color');
-    }));
-    const rnd = addColorChip('随机', ['#999', '#bbb', '#ddd'], () => {
-      randomColors();
-      syncControls();
-      changed('color');
-      rnd.querySelectorAll('.dots i').forEach((d, i) => { d.style.background = state.regions[KEYS[i]].fill; });
-    });
-
-    $$('[data-mix]').forEach(b => b.addEventListener('click', () => {
-      autoMix(b.dataset.mix);
-      syncControls();
-      changed('color');
-    }));
-  }
-
+  // ---------- 配色 ----------
   function mixColors(hexes, mode) {
     const cs = hexes.map(hexToRgb);
     if (mode === 'multiply') return rgbToHex(cs.reduce((acc, c) => acc.map((v, i) => v * c[i] / 255)));
@@ -799,7 +862,7 @@
   // ---------- 导出 ----------
   function fileBase() {
     const name = ['a', 'b', 'c'].map(k => state.regions[k].text).join('-').replace(/[\s\\/:*?"<>|]+/g, '').slice(0, 40);
-    return '三色图' + (name ? '-' + name : '');
+    return t('fileBase') + (name ? '-' + name : '');
   }
 
   function download(blob, name) {
@@ -822,7 +885,7 @@
     paint(c.getContext('2d'), L, { scale: s, bg });
     return c;
   }
-  const toBlob = (canvas, mime, q) => new Promise((res, rej) => canvas.toBlob(b => (b ? res(b) : rej(new Error('浏览器无法生成图片'))), mime, q));
+  const toBlob = (canvas, mime, q) => new Promise((res, rej) => canvas.toBlob(b => (b ? res(b) : rej(new Error(t('blobFailed')))), mime, q));
 
   async function exportStatic(fmt) {
     await ensureFonts();
@@ -833,7 +896,7 @@
     const mime = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }[fmt];
     const blob = await toBlob(renderStatic(fmt), mime, 0.95);
     if (blob.type !== mime) {
-      toast(`当前浏览器不支持导出 ${fmt.toUpperCase()}，已改存为 PNG`);
+      toast(t('fmtUnsupported', { fmt: fmt.toUpperCase() }));
       download(blob, fileBase() + '.png');
       return;
     }
@@ -842,26 +905,25 @@
 
   async function copyImage() {
     if (!navigator.clipboard || !window.ClipboardItem) {
-      toast('当前浏览器不支持复制图片，请使用下载');
+      toast(t('copyUnsupported'));
       return;
     }
     try {
       const blob = (async () => { await ensureFonts(); return toBlob(renderStatic('png'), 'image/png'); })();
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      toast('图片已复制，可以直接粘贴到聊天窗口');
+      toast(t('copied'));
     } catch (e) {
-      toast('复制失败：' + (e.message || e));
+      toast(t('copyFailed', { msg: e.message || e }));
     }
   }
 
-  let gifBusy = false, gifUrl = null;
+  let gifBusy = false, gifUrl = null, gifInfo = null;
   async function makeGif() {
     if (gifBusy) return;
     gifBusy = true;
     const btns = $$('[data-export="gif"]');
-    const label = btns[0].textContent;
-    const setLabel = text => btns.forEach(b => { b.textContent = text; b.disabled = text !== label; });
-    setLabel('生成中…');
+    const setLabel = text => btns.forEach(b => { b.textContent = text; b.disabled = true; });
+    setLabel(t('gifBusy'));
     try {
       await ensureFonts();
       const a = clone(state.anim), L = geo.anim;
@@ -877,13 +939,13 @@
       const frames = frameList(a);
       const enc = new GifEncoder(size, size, { loop: a.loop, transparent: state.transparent });
       // 从几帧代表性画面里挑出调色板
-      for (const t of [0, 0.15, 0.35, 0.6, 0.85].map(x => x * a.spin).concat([a.spin + EFFECT * 0.3, a.spin + EFFECT + 1])) {
-        enc.sample(grab(frameAt(t, a)));
+      for (const time of [0, 0.15, 0.35, 0.6, 0.85].map(x => x * a.spin).concat([a.spin + EFFECT * 0.3, a.spin + EFFECT + 1])) {
+        enc.sample(grab(frameAt(time, a)));
       }
       enc.buildPalette();
       for (let i = 0; i < frames.length; i++) {
         enc.addFrame(grab(frameAt(frames[i].t, a)), frames[i].delay);
-        if (i % 2 === 1) { setLabel(`生成中 ${Math.round((i + 1) / frames.length * 100)}%`); await tick(); }
+        if (i % 2 === 1) { setLabel(t('gifProgress', { p: Math.round((i + 1) / frames.length * 100) })); await tick(); }
       }
       const blob = new Blob([enc.finish()], { type: 'image/gif' });
       if (gifUrl) URL.revokeObjectURL(gifUrl);
@@ -893,51 +955,50 @@
       dl.href = gifUrl;
       dl.download = fileBase() + '.gif';
       const kb = blob.size / 1024;
-      $('#gifMeta').textContent = `${size}×${size} · ${frames.length} 帧 · ${kb >= 1024 ? (kb / 1024).toFixed(2) + ' MB' : Math.round(kb) + ' KB'}`;
+      gifInfo = { w: size, h: size, n: frames.length, size: kb >= 1024 ? (kb / 1024).toFixed(2) + ' MB' : Math.round(kb) + ' KB' };
+      $('#gifMeta').textContent = t('gifMeta', gifInfo);
       const card = $('#gifCard');
       card.hidden = false;
       card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      toast('GIF 已生成');
+      toast(t('gifDone'));
     } catch (e) {
       console.error(e);
-      toast('生成失败：' + (e.message || e));
+      toast(t('gifFailed', { msg: e.message || e }));
     } finally {
       gifBusy = false;
-      setLabel(label);
+      btns.forEach(b => { b.textContent = t('makeGif'); b.disabled = false; });
     }
   }
 
   // ---------- 杂项 ----------
   let toastTimer = 0;
   function toast(msg) {
-    const t = $('#toast');
-    t.textContent = msg;
-    t.classList.add('show');
+    const el = $('#toast');
+    el.textContent = msg;
+    el.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
   }
 
   async function share() {
     const url = `${location.origin}${location.pathname}#s=${encodeState(state)}`;
     try {
       await navigator.clipboard.writeText(url);
-      toast('分享链接已复制，打开即可看到同样的图');
+      toast(t('shared'));
     } catch (e) {
-      prompt('复制下面的链接：', url);
+      prompt(t('sharePrompt'), url);
     }
   }
 
   function init() {
     geo = computeGeo(state);
-    mountSliders();
-    mountRegions();
-    mountSelects();
-    mountPresets();
-    syncControls();
+    fillSelect($('#langSelect'), I18N.LANGS.map(l => [l.code, l.name]));
+    buildUI();
 
     document.addEventListener('input', onControl);
     document.addEventListener('change', onControl);
 
+    $('#langSelect').addEventListener('change', e => setLang(e.target.value));
     $$('.seg [data-mode]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
     $('#playBtn').addEventListener('click', () => (playing ? pause() : play()));
     $('#previewAnim').addEventListener('click', () => {
@@ -948,7 +1009,12 @@
       const f = b.dataset.export;
       if (f === 'gif') makeGif();
       else if (f === 'copy') copyImage();
-      else exportStatic(f).catch(e => toast('导出失败：' + (e.message || e)));
+      else exportStatic(f).catch(e => toast(t('exportFailed', { msg: e.message || e })));
+    }));
+    $$('[data-mix]').forEach(b => b.addEventListener('click', () => {
+      autoMix(b.dataset.mix);
+      syncControls();
+      changed('color');
     }));
     $('#gifClose').addEventListener('click', () => { $('#gifCard').hidden = true; });
     $('#resetPos').addEventListener('click', () => {
@@ -957,11 +1023,11 @@
     });
     $('#shareBtn').addEventListener('click', share);
     $('#resetBtn').addEventListener('click', () => {
-      if (!confirm('恢复成默认的三色图？当前的修改会丢失。')) return;
-      state = clone(DEFAULTS);
+      if (!confirm(t('resetConfirm'))) return;
+      state = defaults();
       syncControls();
       changed();
-      toast('已恢复默认');
+      toast(t('resetDone'));
     });
 
     new ResizeObserver(requestRender).observe($('.canvas-area'));
@@ -973,7 +1039,7 @@
   }
 
   // 方便调试与自动化检查
-  window.sansetu = { get state() { return state; }, get geo() { return geo; }, paint, buildSVG, frameList, frameAt, ensureFonts, labelBox };
+  window.sansetu = { get state() { return state; }, get geo() { return geo; }, get lang() { return lang; }, setLang, paint, buildSVG, frameList, frameAt, ensureFonts, labelBox };
 
   init();
 })();

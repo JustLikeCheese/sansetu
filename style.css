@@ -61,6 +61,17 @@ a { color: inherit; }
 .brand small { color: var(--muted); font-size: 12px; }
 .logo { width: 34px; height: 34px; flex: none; }
 .top-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.lang-select {
+  font: inherit;
+  font-weight: 550;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--field-line);
+  border-radius: 10px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.lang-select:hover { border-color: var(--muted); }
 
 /* 主布局 */
 .app {
@@ -250,7 +261,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .region-head { font-size: 12px; color: var(--muted); }
 .region-head span { text-align: center; }
 .region-head span:nth-child(3) { text-align: left; }
-.rname { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.rname { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .num { width: 100%; }
 
 .tog { position: relative; display: inline-grid; width: 30px; height: 30px; }
@@ -272,12 +283,12 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .ctl-list { display: flex; flex-direction: column; gap: 10px; }
 .ctl {
   display: grid;
-  grid-template-columns: 70px minmax(0, 1fr) 92px;
+  grid-template-columns: 80px minmax(0, 1fr) 92px;
   gap: 10px;
   align-items: center;
 }
 .ctl > :nth-child(2):last-child { grid-column: 2 / 4; }
-.ctl-label { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.ctl-label { color: var(--muted); font-size: 13px; line-height: 1.25; overflow-wrap: anywhere; }
 .ctl-num { display: flex; align-items: center; gap: 4px; }
 .ctl-num input { width: 100%; }
 .ctl-num i { font-style: normal; color: var(--muted); font-size: 12px; min-width: 1.6em; }
@@ -306,5 +317,5 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 @media (max-width: 420px) {
   .region-row { grid-template-columns: 30px 38px minmax(0, 1fr) 26px 54px 28px; gap: 6px; }
-  .ctl { grid-template-columns: 62px minmax(0, 1fr) 84px; gap: 8px; }
+  .ctl { grid-template-columns: 74px minmax(0, 1fr) 80px; gap: 8px; }
 }
