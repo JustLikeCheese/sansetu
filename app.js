@@ -12,6 +12,8 @@
   const AXIS = { a: -90, b: 150, c: 30, ab: 210, ac: -30, bc: 90 };
   const LINE_H = 1.15;
   const EFFECT = 0.5; // 中心字特效时长（秒）
+  // GIF 帧延时以 1/100 秒计，很多播放器会把过短的延时（如 50 帧/秒的 2/100 秒）拉慢，所以最高 25 帧
+  const FPS = [10, 15, 20, 25];
   const STORE_KEY = 'sansetu:v1';
 
   const GF = 'https://fonts.googleapis.com/css2?family=';
@@ -129,18 +131,24 @@
   }
 
   // ---------- 状态 ----------
+  // 旧版本保存的非法值（比如已移除的 50 帧/秒）改成最接近的可用值
+  function normalize(st) {
+    if (!FPS.includes(st.anim.fps)) st.anim.fps = FPS.reduce((a, b) => (Math.abs(b - st.anim.fps) < Math.abs(a - st.anim.fps) ? b : a));
+    return st;
+  }
+
   function loadInitial() {
     const m = location.hash.match(/^#s=([\w-]+)/);
     if (m) {
       try {
         const st = merge(clone(DEFAULTS), decodeState(m[1]));
         history.replaceState(null, '', location.pathname + location.search);
-        return st;
+        return normalize(st);
       } catch (e) { /* 链接损坏则忽略 */ }
     }
     try {
       const raw = localStorage.getItem(STORE_KEY);
-      if (raw) return merge(clone(DEFAULTS), JSON.parse(raw));
+      if (raw) return normalize(merge(clone(DEFAULTS), JSON.parse(raw)));
     } catch (e) { /* 无痕模式等 */ }
     return clone(DEFAULTS);
   }
@@ -446,11 +454,19 @@
   // GIF 帧序列：旋转 → 中心字特效 → 停住（停住那帧用长延时）
   function frameList(a) {
     const dt = 1 / a.fps, frames = [];
+    // GIF 延时只能是整数个 1/100 秒：按累计时间取整，15 帧/秒时就是 7/7/6 交替，总时长不会跑偏
+    let elapsed = 0, cs = 0;
+    const push = (t, dur) => {
+      elapsed += dur;
+      const next = Math.round(elapsed * 100);
+      frames.push({ t, delay: (next - cs) * 10 });
+      cs = next;
+    };
     const nSpin = Math.max(2, Math.ceil(a.spin * a.fps - 1e-6));
-    for (let i = 0; i < nSpin; i++) frames.push({ t: i * dt, delay: 1000 * dt });
+    for (let i = 0; i < nSpin; i++) push(i * dt, dt);
     const nEff = a.center === 'none' ? 0 : Math.floor(Math.min(EFFECT, a.hold) * a.fps);
-    for (let i = 0; i < nEff; i++) frames.push({ t: a.spin + i * dt, delay: 1000 * dt });
-    frames.push({ t: a.spin + EFFECT + 1, delay: Math.max(1000 * dt, 1000 * (a.hold - nEff * dt)) });
+    for (let i = 0; i < nEff; i++) push(a.spin + i * dt, dt);
+    push(a.spin + EFFECT + 1, Math.max(dt, a.hold - nEff * dt));
     // 循环播放时把停住的完整画面放到第一帧，聊天软件里的缩略图更好看
     if (a.loop) frames.unshift(frames.pop());
     return frames;
