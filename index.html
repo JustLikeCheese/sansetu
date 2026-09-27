@@ -42,31 +42,62 @@
         <span class="dim" id="sizeInfo"></span>
       </div>
       <div class="canvas-area">
-        <div class="canvas-box checker" id="canvasBox"><canvas id="view" data-i18n-aria="previewAlt" aria-label="三色图预览"></canvas></div>
+        <div class="canvas-box checker" id="canvasBox">
+          <canvas id="view" data-i18n-aria="previewAlt" aria-label="三色图预览"></canvas>
+          <div class="play-badge" id="stageBadge" hidden></div>
+        </div>
       </div>
-      <p class="hint" id="hint" data-i18n="hintStatic">拖动图上的文字可以微调位置，双击文字直接修改</p>
+      <p class="hint" id="hint" data-i18n="hintStatic">单击文字直接编辑，拖动文字移动；右键更多选项</p>
     </div>
 
     <div class="card export-card">
-      <label class="inline-field"><span data-i18n="exportSize">导出尺寸</span>
-        <select id="exportScale" data-k="exportScale" data-num></select>
-      </label>
-      <div class="export-btns">
-        <button class="btn" type="button" data-export="png">PNG</button>
-        <button class="btn" type="button" data-export="jpg">JPG</button>
-        <button class="btn" type="button" data-export="webp">WebP</button>
-        <button class="btn" type="button" data-export="svg">SVG</button>
-        <button class="btn" type="button" data-export="copy" data-i18n="copyImage">复制图片</button>
-        <button class="btn primary" type="button" data-export="gif" data-i18n="makeGif">生成 GIF 动图</button>
+      <div class="export-group">
+        <div class="export-head">
+          <b data-i18n="exportStatic">静态图</b>
+          <label class="inline-field"><span data-i18n="exportSize">导出尺寸</span>
+            <select id="exportScale" data-k="exportScale" data-num></select>
+          </label>
+        </div>
+        <div class="export-btns">
+          <button class="btn" type="button" data-export="png">PNG</button>
+          <button class="btn" type="button" data-export="jpg">JPG</button>
+          <button class="btn" type="button" data-export="webp">WebP</button>
+          <button class="btn" type="button" data-export="avif" hidden>AVIF</button>
+          <button class="btn" type="button" data-export="svg">SVG</button>
+          <button class="btn" type="button" data-export="bmp">BMP</button>
+          <button class="btn" type="button" data-export="ico">ICO</button>
+          <button class="btn" type="button" data-export="copy" data-i18n="copyImage">复制图片</button>
+        </div>
+      </div>
+      <div class="export-group">
+        <div class="export-head">
+          <b data-i18n="exportAnim">动图 / 视频</b>
+          <span class="dim" id="animInfo"></span>
+        </div>
+        <div class="export-btns">
+          <button class="btn primary" type="button" data-export="gif">GIF</button>
+          <button class="btn" type="button" data-export="apng">APNG</button>
+          <button class="btn" type="button" data-export="webpa" data-i18n="fmtWebpAnim">WebP 动图</button>
+          <button class="btn" type="button" data-export="video" data-i18n="fmtVideo">视频</button>
+          <button class="btn" type="button" data-export="copygif" data-i18n="copyGif">复制 GIF</button>
+        </div>
       </div>
     </div>
 
-    <div class="card gif-card" id="gifCard" hidden>
-      <div class="gif-head"><b data-i18n="gifTitle">GIF 成品预览</b><span class="dim" id="gifMeta"></span></div>
-      <div class="gif-box checker"><img id="gifImg" data-i18n-alt="gifAlt" alt="生成的 GIF 动图"></div>
+    <div class="card anim-card" id="animCard" hidden>
+      <div class="gif-head"><b data-i18n="animResult">动图成品</b><span class="dim" id="animMeta"></span></div>
+      <div class="anim-box checker" id="animBox" data-i18n-aria="clickPause" aria-label="点击画面暂停 / 继续" role="button" tabindex="0">
+        <canvas id="animCanvas" hidden></canvas>
+        <img id="animImg" data-i18n-alt="animResult" alt="动图成品" hidden>
+        <video id="animVideo" loop muted playsinline hidden></video>
+        <div class="play-badge" id="animBadge" hidden></div>
+      </div>
+      <p class="hint" data-i18n="clickPause">点击画面暂停 / 继续</p>
       <div class="row-btns">
-        <a class="btn primary" id="gifDownload" href="#" download data-i18n="downloadGif">下载 GIF</a>
-        <button class="btn ghost" id="gifClose" type="button" data-i18n="collapse">收起</button>
+        <a class="btn primary" id="animDownload" href="#" download>下载</a>
+        <button class="btn" id="animCopy" type="button">复制</button>
+        <button class="btn" id="animShare" type="button" data-i18n="shareFile" hidden>分享…</button>
+        <button class="btn ghost" id="animClose" type="button" data-i18n="collapse">收起</button>
       </div>
     </div>
   </section>
@@ -135,6 +166,7 @@
       <summary data-i18n="animTitle">动图 · 转圈圈表情包</summary>
       <div class="sec-body">
         <div id="animSliders" class="ctl-list"></div>
+        <p class="tip" data-i18n="fpsHint"></p>
         <div class="ctl"><span class="ctl-label" data-i18n="direction">方向</span>
           <select data-k="anim.dir" data-num class="wide" data-i18n-aria="direction" aria-label="方向">
             <option value="1" data-i18n="cw">顺时针</option>
@@ -157,9 +189,6 @@
             <option value="none" data-i18n="fxNone">无特效</option>
           </select>
         </div>
-        <div class="ctl"><span class="ctl-label" data-i18n="fps">帧率</span>
-          <select id="fpsSelect" data-k="anim.fps" data-num class="wide" data-i18n-aria="fps" aria-label="帧率"></select>
-        </div>
         <label class="check"><input type="checkbox" data-k="anim.upright"> <span data-i18n="upright">旋转时文字保持正向</span></label>
         <label class="check"><input type="checkbox" data-k="anim.loop"> <span data-i18n="loop">GIF 无限循环</span></label>
         <div class="row-btns">
@@ -175,10 +204,12 @@
   <span data-i18n="footer">纯前端生成，图片不会上传到任何服务器</span> · <a href="https://github.com/JustLikeCheese/sansetu" target="_blank" rel="noopener" data-i18n="source">源码</a>
 </footer>
 
+<div class="ctx-menu" id="ctxMenu" role="menu" tabindex="-1" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="i18n.js"></script>
 <script src="gif.js"></script>
+<script src="encoders.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

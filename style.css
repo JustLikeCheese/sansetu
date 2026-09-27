@@ -130,21 +130,111 @@ a { color: inherit; }
 .hint { margin: 10px 0 0; text-align: center; color: var(--muted); font-size: 13px; }
 
 /* 导出 */
-.export-card {
-  padding: 12px 14px;
+.export-card { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+.export-group + .export-group { border-top: 1px solid var(--line); padding-top: 12px; }
+.export-head {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  font-size: 13px;
 }
 .export-btns { display: flex; flex-wrap: wrap; gap: 6px; }
 .inline-field { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
 
-.gif-card { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+/* 成品预览 */
+.anim-card { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.anim-card .hint { margin: 0; }
 .gif-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.gif-box { display: flex; justify-content: center; border-radius: 10px; overflow: hidden; }
-.gif-box img { display: block; max-width: 100%; max-height: 380px; }
+.anim-box {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+}
+.anim-box canvas, .anim-box img, .anim-box video { display: block; max-width: 100%; max-height: 380px; }
+
+/* 暂停时的播放图标 */
+.play-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .55);
+  pointer-events: none;
+}
+.play-badge::after {
+  content: "";
+  position: absolute;
+  left: 25px;
+  top: 20px;
+  border-style: solid;
+  border-width: 12px 0 12px 20px;
+  border-color: transparent transparent transparent #fff;
+}
+
+/* 在图上直接编辑文字 */
+.inline-edit {
+  position: absolute;
+  z-index: 2;
+  margin: 0;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border: 1.5px dashed rgba(0, 0, 0, .75);
+  outline: 2px solid rgba(255, 255, 255, .85);
+  border-radius: 6px;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  text-align: center;
+  white-space: pre;
+}
+
+/* 右键菜单 */
+.ctx-menu {
+  position: fixed;
+  z-index: 20;
+  width: 250px;
+  max-width: calc(100vw - 16px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .2);
+  font-size: 13px;
+}
+.ctx-menu:focus { outline: none; }
+.ctx-title { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-colors { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.ctx-colors label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.ctx-row { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 8px; }
+.ctx-row > span { color: var(--muted); }
+.stepper { display: flex; align-items: center; gap: 4px; }
+.stepper input { width: 64px; text-align: center; }
+.stepper .btn { padding: 3px 10px; }
+.ctx-sep { height: 1px; background: var(--line); margin: 2px -10px; }
+.ctx-item {
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.ctx-item:hover, .ctx-item:focus-visible { background: var(--field); }
 
 /* 按钮 */
 .btn {
