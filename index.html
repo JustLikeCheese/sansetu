@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>三色图制作器</title>
+<meta name="description" content="在线制作「稳定 / 速度 / 便宜」三色韦恩图表情包：自定义颜色、文字、大小，导出 PNG / JPG / WebP / SVG，一键生成转圈圈 GIF 动图。">
+<meta property="og:title" content="三色图制作器">
+<meta property="og:description" content="自定义三色韦恩图，导出多种格式图片，生成转圈圈表情包 GIF。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='11.5' r='9' fill='%23da3e41'/%3E%3Ccircle cx='11' cy='20' r='9' fill='%23efe84d' fill-opacity='.85'/%3E%3Ccircle cx='21' cy='20' r='9' fill='%2353b0db' fill-opacity='.85'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="11.5" r="9" fill="#da3e41"/>
+      <circle cx="11" cy="20" r="9" fill="#efe84d" fill-opacity=".85"/>
+      <circle cx="21" cy="20" r="9" fill="#53b0db" fill-opacity=".85"/>
+    </svg>
+    <span><b>三色图制作器</b><small>不可能三角 · 表情包生成</small></span>
+  </a>
+  <nav class="top-actions">
+    <button class="btn ghost" id="shareBtn" type="button">复制分享链接</button>
+    <button class="btn ghost" id="resetBtn" type="button">恢复默认</button>
+    <a class="btn ghost" href="https://github.com/JustLikeCheese/sansetu" target="_blank" rel="noopener">GitHub</a>
+  </nav>
+</header>
+
+<main class="app">
+  <section class="stage">
+    <div class="card stage-card">
+      <div class="stage-head">
+        <div class="seg" role="tablist" aria-label="预览模式">
+          <button type="button" role="tab" data-mode="static" aria-selected="true">静态图</button>
+          <button type="button" role="tab" data-mode="anim" aria-selected="false">动图预览</button>
+        </div>
+        <button class="btn small" id="playBtn" type="button" hidden>暂停</button>
+        <span class="dim" id="sizeInfo"></span>
+      </div>
+      <div class="canvas-area">
+        <div class="canvas-box checker" id="canvasBox"><canvas id="view" aria-label="三色图预览"></canvas></div>
+      </div>
+      <p class="hint" id="hint">拖动图上的文字可以微调位置，双击文字直接修改</p>
+    </div>
+
+    <div class="card export-card">
+      <label class="inline-field">导出尺寸
+        <select id="exportScale" data-k="exportScale" data-num></select>
+      </label>
+      <div class="export-btns">
+        <button class="btn" type="button" data-export="png">PNG</button>
+        <button class="btn" type="button" data-export="jpg">JPG</button>
+        <button class="btn" type="button" data-export="webp">WebP</button>
+        <button class="btn" type="button" data-export="svg">SVG</button>
+        <button class="btn" type="button" data-export="copy">复制图片</button>
+        <button class="btn primary" type="button" data-export="gif">生成 GIF 动图</button>
+      </div>
+    </div>
+
+    <div class="card gif-card" id="gifCard" hidden>
+      <div class="gif-head"><b>GIF 成品预览</b><span class="dim" id="gifMeta"></span></div>
+      <div class="gif-box checker"><img id="gifImg" alt="生成的 GIF 动图"></div>
+      <div class="row-btns">
+        <a class="btn primary" id="gifDownload" href="#" download>下载 GIF</a>
+        <button class="btn ghost" id="gifClose" type="button">收起</button>
+      </div>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <details class="card sec" open>
+      <summary>预设</summary>
+      <div class="sec-body">
+        <div class="sub">文案</div>
+        <div class="chips" id="textPresets"></div>
+        <div class="sub">配色</div>
+        <div class="chips" id="colorPresets"></div>
+        <div class="sub">交集颜色</div>
+        <div class="chips">
+          <button class="chip" type="button" data-mix="avg">由三圆平均混色</button>
+          <button class="chip" type="button" data-mix="multiply">正片叠底混色</button>
+        </div>
+      </div>
+    </details>
+
+    <details class="card sec" open>
+      <summary>文字与颜色</summary>
+      <div class="sec-body">
+        <div class="region-row region-head"><span>底色</span><span>区域</span><span>文字</span><span>字色</span><span>字号</span><span>粗</span></div>
+        <div id="regionRows" class="region-list"></div>
+        <p class="tip">文字框里按回车可以换行；清空文字即不显示。</p>
+      </div>
+    </details>
+
+    <details class="card sec" open>
+      <summary>圆圈</summary>
+      <div class="sec-body">
+        <div id="circleSliders" class="ctl-list"></div>
+        <div class="ctl"><span class="ctl-label">描边颜色</span><input type="color" class="swatch" data-k="strokeColor" aria-label="圆圈描边颜色"></div>
+      </div>
+    </details>
+
+    <details class="card sec" open>
+      <summary>文字样式</summary>
+      <div class="sec-body">
+        <div class="ctl"><span class="ctl-label">字体</span><select id="fontSelect" data-k="font" class="wide"></select></div>
+        <div id="textSliders" class="ctl-list"></div>
+        <div class="ctl"><span class="ctl-label">描边颜色</span><input type="color" class="swatch" data-k="textStrokeColor" aria-label="文字描边颜色"></div>
+        <div class="row-btns"><button class="btn small" type="button" id="resetPos">文字归位</button></div>
+      </div>
+    </details>
+
+    <details class="card sec">
+      <summary>画布</summary>
+      <div class="sec-body">
+        <div class="ctl"><span class="ctl-label">背景色</span>
+          <div class="ctl-inline">
+            <input type="color" class="swatch" data-k="bg" aria-label="背景色">
+            <label class="check"><input type="checkbox" data-k="transparent"> 透明背景</label>
+          </div>
+        </div>
+        <div id="canvasSliders" class="ctl-list"></div>
+        <label class="check"><input type="checkbox" data-k="square"> 正方形画布</label>
+      </div>
+    </details>
+
+    <details class="card sec" open id="animSec">
+      <summary>动图 · 转圈圈表情包</summary>
+      <div class="sec-body">
+        <div id="animSliders" class="ctl-list"></div>
+        <div class="ctl"><span class="ctl-label">方向</span>
+          <select data-k="anim.dir" data-num class="wide">
+            <option value="1">顺时针</option>
+            <option value="-1">逆时针</option>
+          </select>
+        </div>
+        <div class="ctl"><span class="ctl-label">转速曲线</span>
+          <select data-k="anim.easing" class="wide">
+            <option value="outCubic">减速停下</option>
+            <option value="outQuint">急刹车</option>
+            <option value="inOutCubic">慢 → 快 → 慢</option>
+            <option value="outBack">冲过头再回弹</option>
+            <option value="linear">匀速</option>
+          </select>
+        </div>
+        <div class="ctl"><span class="ctl-label">中心字</span>
+          <select data-k="anim.center" class="wide">
+            <option value="pop">停下时弹一下</option>
+            <option value="reveal">停下时才蹦出来</option>
+            <option value="none">无特效</option>
+          </select>
+        </div>
+        <div class="ctl"><span class="ctl-label">帧率</span>
+          <select data-k="anim.fps" data-num class="wide">
+            <option value="10">10 帧/秒（体积小）</option>
+            <option value="20">20 帧/秒</option>
+            <option value="25">25 帧/秒</option>
+            <option value="50">50 帧/秒（最流畅）</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox" data-k="anim.upright"> 旋转时文字保持正向</label>
+        <label class="check"><input type="checkbox" data-k="anim.loop"> GIF 无限循环</label>
+        <div class="row-btns">
+          <button class="btn" type="button" id="previewAnim">预览动图</button>
+          <button class="btn primary" type="button" data-export="gif">生成 GIF 动图</button>
+        </div>
+      </div>
+    </details>
+  </aside>
+</main>
+
+<footer class="foot">
+  纯前端生成，图片不会上传到任何服务器 · <a href="https://github.com/JustLikeCheese/sansetu" target="_blank" rel="noopener">源码</a>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="gif.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
