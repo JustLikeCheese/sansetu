@@ -19,6 +19,9 @@
   const VIDEO_TYPES = ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
   const STORE_KEY = 'sansetu:v1';
   const LANG_KEY = 'sansetu:lang';
+  const DRAG_KEY = 'sansetu:drag';
+  const MIX_MODES = ['custom', 'avg', 'multiply'];
+  const HISTORY_MAX = 200;
 
   const GF = 'https://fonts.googleapis.com/css2?family=';
   const FONTS = {
@@ -58,7 +61,8 @@
   };
   const fmtName = kind => ({ gif: 'GIF', apng: 'APNG', webpa: t('fmtWebpAnim'), video: t('fmtVideo') }[kind]);
 
-  const region = (fill, color) => ({ text: '', fill, color, size: 104, bold: false, dx: 0, dy: 0 });
+  const region = (fill, color) => ({ text: '', fill, color, size: 104, bold: false, italic: false, underline: false, strike: false, dx: 0, dy: 0 });
+  const STYLES = [['bold', 'B', ''], ['italic', 'I', 'i'], ['underline', 'U', 'u'], ['strike', 'S', 's']];
   // 原图文字是手工摆放的，略偏离对称位置，这里还原出来
   const ORIGINAL_OFFSETS = [[13, -2], [9, 0], [5, 0], [-4, -3], [6, -3], [-2, -2], [7, 2]];
   const BASE = {
@@ -84,6 +88,7 @@
     transparent: false,
     padding: 16,
     square: true,
+    mix: 'custom', // 交集颜色：custom 自定义 | avg 平均混色 | multiply 正片叠底
     exportScale: 1,
     anim: { turns: 2, dir: 1, spin: 1.6, hold: 1.2, easing: 'outCubic', center: 'pop', upright: false, fps: 25, size: 360, loop: true },
   };
@@ -91,7 +96,7 @@
   function applyTextPreset(st, p) {
     KEYS.forEach((k, i) => {
       const [dx, dy] = p.original ? ORIGINAL_OFFSETS[i] : [0, 0];
-      Object.assign(st.regions[k], { text: p.t[i], size: p.s[i], dx, dy, bold: k === 'abc' });
+      Object.assign(st.regions[k], { text: p.t[i], size: p.s[i], dx, dy, bold: k === 'abc', italic: false, underline: false, strike: false });
     });
   }
 
@@ -180,6 +185,7 @@
   function normalize(st) {
     st.anim.fps = clamp(Math.round(st.anim.fps), FPS_MIN, FPS_MAX);
     if (!FONTS[st.font]) st.font = defaults().font;
+    if (!MIX_MODES.includes(st.mix)) st.mix = 'custom';
     return st;
   }
 
@@ -287,7 +293,7 @@
     y: geo.anchors[key].y + state.regions[key].dy,
   });
   const labelSize = r => r.size * state.textScale / 100;
-  const fontOf = (r, size) => `${r.bold ? 700 : 400} ${size}px ${fontStack(state.font)}`;
+  const fontOf = (r, size) => `${r.italic ? 'italic ' : ''}${r.bold ? 700 : 400} ${size}px ${fontStack(state.font)}`;
 
   // ---------- 绘制 ----------
   // L: 布局 {w,h,ox,oy}; o: {scale, angle, cs(中心字缩放), upright, bg, skip(正在编辑、不画的文字)}
@@ -341,6 +347,16 @@
         }
         ctx.fillStyle = r.color;
         ctx.fillText(line, 0, y);
+        if (r.underline || r.strike) {
+          // 画布没有文字装饰线，自己画：下划线在字身下方，删除线在中间
+          const w = ctx.measureText(line).width, th = Math.max(1, size * 0.06);
+          const bar = ly => {
+            if (st.textStrokeWidth > 0) { ctx.lineWidth = st.textStrokeWidth * 2; ctx.strokeRect(-w / 2, ly - th / 2, w, th); }
+            ctx.fillRect(-w / 2, ly - th / 2, w, th);
+          };
+          if (r.underline) bar(y + size * 0.56);
+          if (r.strike) bar(y + size * 0.04);
+        }
       });
       ctx.restore();
     }
@@ -376,7 +392,9 @@
       const p = labelPos(key), size = labelSize(r), lines = r.text.split('\n');
       lines.forEach((line, i) => {
         const y = p.y + (i - (lines.length - 1) / 2) * size * LINE_H;
-        out.push(`<text x="${n(p.x)}" y="${n(y)}" font-size="${n(size)}" font-weight="${r.bold ? 700 : 400}" fill="${col(r.color)}">${esc(line)}</text>`);
+        const deco = [r.underline && 'underline', r.strike && 'line-through'].filter(Boolean).join(' ');
+        out.push(`<text x="${n(p.x)}" y="${n(y)}" font-size="${n(size)}" font-weight="${r.bold ? 700 : 400}"`
+          + `${r.italic ? ' font-style="italic"' : ''}${deco ? ` text-decoration="${deco}"` : ''} fill="${col(r.color)}">${esc(line)}</text>`);
       });
     }
     out.push('</g>', '</g>', '</svg>');
@@ -421,6 +439,9 @@
   const box = $('#canvasBox');
   const mctx = document.createElement('canvas').getContext('2d'); // 用于测量文字
   let mode = 'static';
+  // 画布上的拖动操作默认关闭，打开开关后才能拖，避免误触
+  let dragEnabled = storageGet(DRAG_KEY) === '1';
+  const hintText = () => t(mode === 'anim' ? 'hintAnim' : dragEnabled ? 'hintStatic' : 'hintStaticLocked');
   let playing = false, t0 = 0, raf = 0, lastFrame = { angle: 0, cs: 1 };
   let gesture = null, hover = null, editing = null;
   let frozen = null; // 拖圆边时锁定画布布局，免得画布尺寸跟着变、鼠标位置对不上
@@ -488,13 +509,15 @@
         const b = labelBox(focus.key, 6);
         dashed(() => vctx.strokeRect(b.x, b.y, b.w, b.h));
         vctx.setLineDash([]);
-        const hs = 8 * px;
-        vctx.fillStyle = '#fff';
-        vctx.strokeStyle = 'rgba(0,0,0,.8)';
-        vctx.lineWidth = 1.5 * px;
-        for (const [x, y] of [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]]) {
-          vctx.fillRect(x - hs / 2, y - hs / 2, hs, hs);
-          vctx.strokeRect(x - hs / 2, y - hs / 2, hs, hs);
+        if (dragEnabled) {
+          const hs = 8 * px;
+          vctx.fillStyle = '#fff';
+          vctx.strokeStyle = 'rgba(0,0,0,.8)';
+          vctx.lineWidth = 1.5 * px;
+          for (const [x, y] of [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]]) {
+            vctx.fillRect(x - hs / 2, y - hs / 2, hs, hs);
+            vctx.strokeRect(x - hs / 2, y - hs / 2, hs, hs);
+          }
         }
       }
     }
@@ -622,7 +645,7 @@
     mode = m;
     $$('.seg [data-mode]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
     $('#playBtn').hidden = m !== 'anim';
-    $('#hint').textContent = t(m === 'static' ? 'hintStatic' : 'hintAnim');
+    $('#hint').textContent = hintText();
     hover = gesture = frozen = null;
     view.style.cursor = m === 'anim' ? 'pointer' : '';
     pausedAt = 0;
@@ -667,6 +690,11 @@
       if (!state.regions[key].text.trim()) continue;
       const b = labelBox(key, 6);
       if (pt.x < b.x - tol || pt.x > b.x + b.w + tol || pt.y < b.y - tol || pt.y > b.y + b.h + tol) continue;
+      // 没开拖动编辑时只认文字本身（单击编辑）
+      if (!dragEnabled) {
+        if (pt.x >= b.x && pt.x <= b.x + b.w && pt.y >= b.y && pt.y <= b.y + b.h) return { kind: 'label', key, cursor: 'text' };
+        continue;
+      }
       const nl = Math.abs(pt.x - b.x) <= tol, nr = Math.abs(pt.x - b.x - b.w) <= tol;
       const nt = Math.abs(pt.y - b.y) <= tol, nb = Math.abs(pt.y - b.y - b.h) <= tol;
       if (nl || nr || nt || nb) {
@@ -675,6 +703,7 @@
       }
       return { kind: 'move', key, cursor: 'grab' };
     }
+    if (!dragEnabled) return null;
     let best = null;
     for (const key of ['a', 'b', 'c']) {
       const c = geo.C[key];
@@ -702,7 +731,9 @@
     e.preventDefault();
     view.setPointerCapture(e.pointerId);
     const g = { ...hit, id: e.pointerId, x0: e.clientX, y0: e.clientY, pt0: pt, moved: false };
-    if (hit.kind === 'move') {
+    if (hit.kind === 'label') {
+      // 只用来识别单击
+    } else if (hit.kind === 'move') {
       const r = state.regions[hit.key];
       Object.assign(g, { dx: r.dx, dy: r.dy });
       view.style.cursor = 'grabbing';
@@ -726,6 +757,7 @@
     if (g && e.pointerId === g.id) {
       if (!g.moved && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) < 3) return;
       g.moved = true;
+      if (g.kind === 'label') return;
       const pt = toDesign(e.clientX, e.clientY);
       if (g.kind === 'move') {
         const r = state.regions[g.key];
@@ -762,10 +794,9 @@
     gesture = null;
     frozen = null;
     view.style.cursor = hover ? hover.cursor : '';
-    changed(g.kind);
-    syncControls();
+    if (g.kind !== 'label') { changed(g.kind); syncControls(); }
     // 没拖动就是单击：点文字直接进入编辑
-    if (!g.moved && e.type === 'pointerup' && (g.kind === 'move' || g.kind === 'size')) startEdit(g.key);
+    if (!g.moved && e.type === 'pointerup' && ['label', 'move', 'size'].includes(g.kind)) startEdit(g.key);
   };
   view.addEventListener('pointerup', endGesture);
   view.addEventListener('pointercancel', endGesture);
@@ -774,7 +805,7 @@
   });
   // 手指按在可操作的位置时阻止页面滚动，其余位置照常滚动
   view.addEventListener('touchstart', e => {
-    if (mode !== 'static' || e.touches.length !== 1) return;
+    if (mode !== 'static' || !dragEnabled || e.touches.length !== 1) return;
     const tp = e.touches[0];
     if (hitTest(toDesign(tp.clientX, tp.clientY), tp.clientX, tp.clientY, true)) e.preventDefault();
   }, { passive: false });
@@ -783,7 +814,7 @@
   view.addEventListener('dblclick', e => {
     if (mode !== 'static') return;
     const hit = hitTest(toDesign(e.clientX, e.clientY), e.clientX, e.clientY, false);
-    if (hit && hit.key && (hit.kind === 'move' || hit.kind === 'size')) startEdit(hit.key);
+    if (hit && hit.key && ['label', 'move', 'size'].includes(hit.kind)) startEdit(hit.key);
   });
   view.addEventListener('contextmenu', e => {
     e.preventDefault();
@@ -839,7 +870,8 @@
     const w = (Math.max(size, ...lines.map(l => mctx.measureText(l).width)) + size * 0.6) * k;
     const h = lines.length * size * LINE_H * k + 8;
     el.style.cssText = `left:${(L.ox + p.x) * k - w / 2}px;top:${(L.oy + p.y) * k - h / 2}px;width:${w}px;height:${h}px;`
-      + `font:${r.bold ? 700 : 400} ${size * k}px/${LINE_H} ${fontStack(state.font)};color:${r.color};caret-color:${r.color}`;
+      + `font:${r.italic ? 'italic ' : ''}${r.bold ? 700 : 400} ${size * k}px/${LINE_H} ${fontStack(state.font)};color:${r.color};caret-color:${r.color};`
+      + `text-decoration:${[r.underline && 'underline', r.strike && 'line-through'].filter(Boolean).join(' ') || 'none'}`;
   }
 
   function endEdit(commit) {
@@ -857,14 +889,14 @@
 
   function openMenu(key, x, y) {
     const row = (k, label, min, max) =>
-      `<div class="ctx-row"><span>${esc(t(label))}</span><input type="range" data-k="${k}" min="${min}" max="${max}" step="1" aria-label="${esc(t(label))}"></div>`;
+      `<div class="ctx-row"><span>${esc(t(label))}</span><x-slider data-k="${k}" min="${min}" max="${max}" step="1" aria-label="${esc(t(label))}"></x-slider></div>`;
     const item = (act, text) => `<button type="button" class="ctx-item" data-act="${act}">${esc(text)}</button>`;
     const parts = [];
     if (key === 'canvas') {
       parts.push(
         `<div class="ctx-title">${esc(t('canvas'))}</div>`,
-        `<div class="ctx-colors"><label>${esc(t('background'))}<input type="color" class="swatch" data-k="bg"></label>`
-          + `<label class="check"><input type="checkbox" data-k="transparent"> ${esc(t('transparent'))}</label></div>`,
+        `<div class="ctx-colors"><span>${esc(t('background'))}</span><x-color data-k="bg" aria-label="${esc(t('background'))}"></x-color>`
+          + `<x-check data-k="transparent"><span>${esc(t('transparent'))}</span></x-check></div>`,
         row('radius', 'radius', 60, 600), row('gap', 'gap', 30, 200), row('padding', 'padding', 0, 300),
         '<div class="ctx-sep"></div>', item('resetall', t('menuResetAll')));
     } else {
@@ -872,13 +904,10 @@
       parts.push(
         `<div class="ctx-title">${esc(t('region_' + key))}${first ? ' · ' + esc(first) : ''}</div>`,
         `<textarea rows="1" data-k="regions.${key}.text" aria-label="${esc(t('menuText'))}" spellcheck="false"></textarea>`,
-        `<div class="ctx-colors"><label>${esc(t('menuFill'))}<input type="color" class="swatch" data-k="regions.${key}.fill"></label>`
-          + `<label>${esc(t('menuColor'))}<input type="color" class="swatch round" data-k="regions.${key}.color"></label></div>`,
-        `<div class="ctx-row"><span>${esc(t('menuSize'))}</span><div class="stepper">`
-          + '<button type="button" class="btn small" data-act="size-" aria-label="-">−</button>'
-          + `<input type="number" data-k="regions.${key}.size" min="4" max="1000" step="1" aria-label="${esc(t('menuSize'))}">`
-          + '<button type="button" class="btn small" data-act="size+" aria-label="+">+</button></div></div>',
-        `<label class="check"><input type="checkbox" data-k="regions.${key}.bold"> ${esc(t('menuBold'))}</label>`);
+        `<div class="ctx-colors"><span>${esc(t('menuFill'))}</span><x-color data-k="regions.${key}.fill" aria-label="${esc(t('menuFill'))}"></x-color>`
+          + `<span>${esc(t('menuColor'))}</span><x-color class="round" data-k="regions.${key}.color" aria-label="${esc(t('menuColor'))}"></x-color></div>`,
+        `<div class="ctx-row"><span>${esc(t('menuSize'))}</span><x-number buttons data-k="regions.${key}.size" min="4" max="1000" step="4" aria-label="${esc(t('menuSize'))}"></x-number></div>`,
+        `<div class="ctx-styles">${styleToggles(key)}</div>`);
       if (key.length === 1) parts.push(row(`scale.${key}`, 'menuCircle', 40, 160));
       parts.push('<div class="ctx-sep"></div>', item('edit', t('menuEdit')), item('resetpos', t('menuResetPos')), item('clear', t('menuClear')));
     }
@@ -893,6 +922,7 @@
   }
 
   function closeMenu() {
+    UI.closePopup();
     if (menu.hidden) return;
     menu.hidden = true;
     menu.textContent = '';
@@ -902,13 +932,6 @@
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const key = menu.dataset.key, act = b.dataset.act;
-    if (act === 'size-' || act === 'size+') {
-      const r = state.regions[key];
-      r.size = clamp(r.size + (act === 'size+' ? 4 : -4), 4, 1000);
-      syncControls();
-      changed('size');
-      return;
-    }
     closeMenu();
     if (act === 'edit') { setMode('static'); startEdit(key); }
     else if (act === 'resetpos') Object.assign(state.regions[key], { dx: 0, dy: 0 });
@@ -961,8 +984,8 @@
         row.className = 'ctl';
         const attrs = `data-k="${s.k}" min="${s.min}" max="${s.max}" step="${s.step}"`;
         row.innerHTML = `<span class="ctl-label">${esc(label)}</span>`
-          + `<input type="range" ${attrs} aria-label="${esc(label)}">`
-          + `<span class="ctl-num"><input type="number" ${attrs} aria-label="${esc(t('ariaValue', { label }))}"><i>${esc(unit)}</i></span>`;
+          + `<x-slider ${attrs} aria-label="${esc(label)}"></x-slider>`
+          + `<span class="ctl-num"><x-number ${attrs} aria-label="${esc(t('ariaValue', { label }))}"></x-number><i>${esc(unit)}</i></span>`;
         host.appendChild(row);
       }
     }
@@ -977,20 +1000,25 @@
       const row = document.createElement('div');
       row.className = 'region-row';
       row.innerHTML = `
-        <input type="color" class="swatch" data-k="regions.${k}.fill" title="${a('ariaFill')}" aria-label="${a('ariaFill')}">
+        <x-color data-k="regions.${k}.fill" title="${a('ariaFill')}" aria-label="${a('ariaFill')}"></x-color>
         <span class="rname">${esc(name)}</span>
         <textarea rows="1" data-k="regions.${k}.text" aria-label="${a('ariaText')}" spellcheck="false"></textarea>
-        <input type="color" class="swatch round" data-k="regions.${k}.color" title="${a('ariaTextColor')}" aria-label="${a('ariaTextColor')}">
-        <input type="number" class="num" data-k="regions.${k}.size" min="4" max="1000" step="1" title="${esc(t('titleSize'))}" aria-label="${a('ariaSize')}">
-        <label class="tog" title="${esc(t('titleBold'))}"><input type="checkbox" data-k="regions.${k}.bold" aria-label="${a('ariaBold')}"><span>B</span></label>`;
+        <div class="region-style">
+          <x-color class="round" data-k="regions.${k}.color" title="${a('ariaTextColor')}" aria-label="${a('ariaTextColor')}"></x-color>
+          <x-number data-k="regions.${k}.size" min="4" max="1000" step="1" title="${esc(t('titleSize'))}" aria-label="${a('ariaSize')}"></x-number>
+          ${styleToggles(k)}
+        </div>`;
       host.appendChild(row);
     }
   }
 
-  function fillSelect(sel, items) {
-    sel.textContent = '';
-    for (const [value, label] of items) sel.add(new Option(label, String(value)));
-  }
+  // B / I / U / S 四个样式开关
+  const styleToggles = k => STYLES.map(([prop, txt, cls]) => {
+    const style = t('style_' + prop);
+    return `<x-check class="tog ${cls}" data-k="regions.${k}.${prop}" title="${esc(style)}" aria-label="${esc(t('ariaStyle', { name: t('region_' + k), style }))}">${txt}</x-check>`;
+  }).join('');
+
+  function fillSelect(sel, items) { sel.setOptions(items); }
 
   function mountSelects() {
     fillSelect($('#fontSelect'), Object.keys(FONTS).map(k => [k, t('font_' + k)]));
@@ -1007,10 +1035,13 @@
       else if (String(el.value) !== String(v)) el.value = v;
       if (el.tagName === 'TEXTAREA') fitTextarea(el);
     }
-    for (const o of $('#exportScale').options) {
-      const k = Number(o.value);
+    const es = $('#exportScale');
+    for (const o of es.options) {
+      const k = Number(o.getAttribute('value'));
       o.textContent = `${k}x · ${Math.round(geo.stat.w * k)}×${Math.round(geo.stat.h * k)}`;
     }
+    es.refresh();
+    $$('[data-mix]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mix === state.mix)));
     const a = state.anim;
     $('#animInfo').textContent = `${Math.round(a.size)}×${Math.round(a.size)} · ${a.fps} fps`;
   }
@@ -1019,7 +1050,64 @@
     geo = computeGeo(state);
     if (!key || /text|bold|font/.test(key)) ensureFontsSoon();
     saveSoon();
+    commitSoon();
     requestRender();
+  }
+
+  // ---------- 撤销 / 重做 ----------
+  // 保存整份状态的快照；连续的修改（拖滑杆、打字）停顿 400 毫秒后才记一步
+  const history = { stack: [], index: 0, timer: 0, applying: false };
+  // 按住鼠标（拖滑杆、拖文字、取色）期间不记步骤，松手时立即记一步：一次拖动或一次点击就是一步
+  let pointerHeld = false;
+  document.addEventListener('pointerdown', () => { pointerHeld = true; }, true);
+  for (const type of ['pointerup', 'pointercancel']) {
+    document.addEventListener(type, () => { pointerHeld = false; commitHistory(); }, true);
+  }
+
+  function historyInit() {
+    history.stack = [stateSig()];
+    history.index = 0;
+    updateUndoButtons();
+  }
+
+  function commitHistory() {
+    clearTimeout(history.timer);
+    const cur = stateSig();
+    if (cur !== history.stack[history.index]) {
+      history.stack.length = history.index + 1;
+      history.stack.push(cur);
+      if (history.stack.length > HISTORY_MAX) history.stack.shift();
+      history.index = history.stack.length - 1;
+    }
+    updateUndoButtons();
+  }
+
+  function commitSoon() {
+    if (history.applying || !history.stack.length) return;
+    clearTimeout(history.timer);
+    history.timer = setTimeout(() => (pointerHeld ? commitSoon() : commitHistory()), 400);
+    updateUndoButtons();
+  }
+
+  function undoRedo(step) {
+    endEdit(true);
+    closeMenu();
+    commitHistory();
+    const i = history.index + step;
+    if (i < 0 || i >= history.stack.length) return;
+    history.index = i;
+    history.applying = true;
+    state = JSON.parse(history.stack[i]);
+    syncControls();
+    changed();
+    history.applying = false;
+    updateUndoButtons();
+  }
+
+  function updateUndoButtons() {
+    const dirty = stateSig() !== history.stack[history.index];
+    $('#undoBtn').disabled = history.index <= 0 && !dirty;
+    $('#redoBtn').disabled = history.index >= history.stack.length - 1 || dirty;
   }
 
   function onControl(e) {
@@ -1037,6 +1125,9 @@
     } else v = el.value;
     if (el.tagName === 'TEXTAREA') fitTextarea(el);
     setPath(state, k, v);
+    // 手动改了交集的底色就切回「自定义」；自动混色模式下改三圆颜色时交集跟着变
+    if (/^regions\.(ab|ac|bc|abc)\.fill$/.test(k)) state.mix = 'custom';
+    else if (state.mix !== 'custom' && /^regions\.[abc]\.fill$/.test(k)) applyMix(state.mix, false);
     syncControls(el);
     changed(k);
   }
@@ -1074,6 +1165,7 @@
     COLOR_PRESETS.forEach(p => addColorChip(t(p.name), p.fill.slice(0, 3), () => {
       KEYS.forEach((k, i) => Object.assign(state.regions[k], { fill: p.fill[i], color: p.color[i] }));
       state.bg = p.bg;
+      state.mix = 'custom';
       syncControls();
       changed('color');
     }));
@@ -1093,8 +1185,11 @@
     for (const el of $$('[data-i18n]')) el.textContent = t(el.dataset.i18n);
     for (const el of $$('[data-i18n-aria]')) el.setAttribute('aria-label', t(el.dataset.i18nAria));
     for (const el of $$('[data-i18n-alt]')) el.alt = t(el.dataset.i18nAlt);
+    for (const el of $$('[data-i18n-title]')) el.title = t(el.dataset.i18nTitle);
+    UI.setStrings({ hue: t('colorHue'), sv: t('colorSV'), hex: t('colorHex'), decrease: t('decrease'), increase: t('increase'), pick: t('pickColor') });
+    for (const el of $$('x-select')) el.refresh();
     $('#langSelect').value = lang;
-    $('#hint').textContent = t(mode === 'static' ? 'hintStatic' : 'hintAnim');
+    $('#hint').textContent = hintText();
     updatePlayBtn();
     updateResultText();
   }
@@ -1132,14 +1227,15 @@
   const darken = (hex, k) => rgbToHex(hexToRgb(hex).map(v => v * k));
   const innerText = hex => (luminance(hex) > 0.5 ? '#000000' : '#ffffff');
 
-  function autoMix(how) {
+  // withText：刚切换到混色模式时顺便把交集文字颜色调成黑 / 白，之后改三圆颜色只更新底色
+  function applyMix(how, withText) {
     const R = state.regions;
     R.ab.fill = mixColors([R.a.fill, R.b.fill], how);
     R.ac.fill = mixColors([R.a.fill, R.c.fill], how);
     R.bc.fill = mixColors([R.b.fill, R.c.fill], how);
     const center = mixColors([R.a.fill, R.b.fill, R.c.fill], how);
     R.abc.fill = how === 'multiply' ? center : darken(center, 0.4);
-    for (const k of ['ab', 'ac', 'bc', 'abc']) R[k].color = innerText(R[k].fill);
+    if (withText) for (const k of ['ab', 'ac', 'bc', 'abc']) R[k].color = innerText(R[k].fill);
   }
 
   function randomColors() {
@@ -1160,6 +1256,7 @@
     R.abc.fill = hsl(h, 8, 22);
     R.abc.color = '#ffffff';
     state.bg = '#ffffff';
+    state.mix = 'custom';
   }
 
   // ---------- 导出：静态图 ----------
@@ -1609,7 +1706,9 @@
     });
     $$('[data-export]').forEach(b => b.addEventListener('click', () => onExport(b.dataset.export, b)));
     $$('[data-mix]').forEach(b => b.addEventListener('click', () => {
-      autoMix(b.dataset.mix);
+      if (state.mix === b.dataset.mix) return;
+      state.mix = b.dataset.mix;
+      if (state.mix !== 'custom') applyMix(state.mix, true);
       syncControls();
       changed('color');
     }));
@@ -1624,6 +1723,18 @@
       changed('pos');
     });
     $('#shareBtn').addEventListener('click', share);
+    $('#undoBtn').addEventListener('click', () => undoRedo(-1));
+    $('#redoBtn').addEventListener('click', () => undoRedo(1));
+    const dragToggle = $('#dragToggle');
+    dragToggle.checked = dragEnabled;
+    dragToggle.addEventListener('change', () => {
+      dragEnabled = dragToggle.checked;
+      storageSet(DRAG_KEY, dragEnabled ? '1' : '0');
+      hover = null;
+      view.style.cursor = '';
+      $('#hint').textContent = hintText();
+      requestRender();
+    });
     $('#resetBtn').addEventListener('click', () => {
       if (!confirm(t('resetConfirm'))) return;
       endEdit(false);
@@ -1634,13 +1745,23 @@
     });
 
     // 菜单：点外面、按 Esc、滚动或改变窗口大小时关闭
-    document.addEventListener('pointerdown', e => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); }, true);
+    document.addEventListener('pointerdown', e => { if (!menu.hidden && !menu.contains(e.target) && !UI.isPopup(e.target)) closeMenu(); }, true);
     window.addEventListener('scroll', closeMenu, { passive: true });
     window.addEventListener('resize', () => { closeMenu(); requestRender(); });
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') closeMenu();
+      if (e.key === 'Escape' && !UI.isPopup(document.activeElement)) closeMenu();
+      // Ctrl/⌘ + Z 撤销，Ctrl/⌘ + Y 重做；按住 Shift 反过来（Ctrl+Shift+Z 重做，Ctrl+Shift+Y 撤销）
+      const key = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (key === 'z' || key === 'y')) {
+        const el = document.activeElement;
+        // 在文本框里打字时交给浏览器自己的文字撤销
+        if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && /^(text|search|url|email)$/.test(el.type)))) return;
+        e.preventDefault();
+        undoRedo((key === 'z') !== e.shiftKey ? -1 : 1);
+        return;
+      }
       const tag = document.activeElement && document.activeElement.tagName;
-      if (e.code === 'Space' && mode === 'anim' && !/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(tag)) {
+      if (e.code === 'Space' && mode === 'anim' && !/^(INPUT|TEXTAREA|SELECT|BUTTON|A|X-[A-Z]+)$/.test(tag)) {
         e.preventDefault();
         togglePlay();
       }
@@ -1649,6 +1770,7 @@
     new ResizeObserver(requestRender).observe($('.canvas-area'));
     if (document.fonts) document.fonts.addEventListener('loadingdone', requestRender);
 
+    historyInit();
     detectAvif();
     drawView();
     ensureFonts().then(requestRender);
@@ -1657,7 +1779,7 @@
   // 方便调试与自动化检查
   window.sansetu = {
     get state() { return state; }, get geo() { return geo; }, get lang() { return lang; },
-    setLang, setMode, paint, buildSVG, frameList, frameAt, toDelays, ensureFonts, labelBox, makeAnim, startEdit, openMenu,
+    setLang, setMode, undoRedo, paint, buildSVG, frameList, frameAt, toDelays, ensureFonts, labelBox, makeAnim, startEdit, openMenu,
   };
 
   init();

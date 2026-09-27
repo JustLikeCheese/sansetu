@@ -23,7 +23,7 @@
     <span><b data-i18n="title">三色图制作器</b><small data-i18n="tagline">不可能三角 · 表情包生成</small></span>
   </a>
   <nav class="top-actions">
-    <select id="langSelect" class="lang-select" data-i18n-aria="language" aria-label="语言"></select>
+    <x-select id="langSelect" class="lang-select" data-i18n-aria="language" aria-label="语言"></x-select>
     <button class="btn ghost" id="shareBtn" type="button" data-i18n="share">复制分享链接</button>
     <button class="btn ghost" id="resetBtn" type="button" data-i18n="reset">恢复默认</button>
     <a class="btn ghost" href="https://github.com/JustLikeCheese/sansetu" target="_blank" rel="noopener">GitHub</a>
@@ -39,6 +39,15 @@
           <button type="button" role="tab" data-mode="anim" aria-selected="false" data-i18n="modeAnim">动图预览</button>
         </div>
         <button class="btn small" id="playBtn" type="button" hidden>暂停</button>
+        <div class="stage-tools">
+          <button class="btn icon-btn" id="undoBtn" type="button" data-i18n-title="undoTitle" data-i18n-aria="undoTitle" aria-label="撤销" disabled>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 5 3.5 9l4 4M4 9h7.5a5 5 0 0 1 0 10H9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="btn icon-btn" id="redoBtn" type="button" data-i18n-title="redoTitle" data-i18n-aria="redoTitle" aria-label="重做" disabled>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 5l4 4-4 4M16 9H8.5a5 5 0 0 0 0 10H11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <x-check class="switch" id="dragToggle" data-i18n-title="dragToggleTitle"><span data-i18n="dragToggle">拖动编辑</span></x-check>
+        </div>
         <span class="dim" id="sizeInfo"></span>
       </div>
       <div class="canvas-area">
@@ -47,16 +56,16 @@
           <div class="play-badge" id="stageBadge" hidden></div>
         </div>
       </div>
-      <p class="hint" id="hint" data-i18n="hintStatic">单击文字直接编辑，拖动文字移动；右键更多选项</p>
+      <p class="hint" id="hint" data-i18n="hintStaticLocked">单击文字直接编辑，右键更多选项</p>
     </div>
 
     <div class="card export-card">
       <div class="export-group">
         <div class="export-head">
           <b data-i18n="exportStatic">静态图</b>
-          <label class="inline-field"><span data-i18n="exportSize">导出尺寸</span>
-            <select id="exportScale" data-k="exportScale" data-num></select>
-          </label>
+          <span class="inline-field"><span data-i18n="exportSize">导出尺寸</span>
+            <x-select id="exportScale" data-k="exportScale" data-num data-i18n-aria="exportSize" aria-label="导出尺寸"></x-select>
+          </span>
         </div>
         <div class="export-btns">
           <button class="btn" type="button" data-export="png">PNG</button>
@@ -111,9 +120,10 @@
         <div class="sub" data-i18n="presetColor">配色</div>
         <div class="chips" id="colorPresets"></div>
         <div class="sub" data-i18n="presetMix">交集颜色</div>
-        <div class="chips">
-          <button class="chip" type="button" data-mix="avg" data-i18n="mixAvg">由三圆平均混色</button>
-          <button class="chip" type="button" data-mix="multiply" data-i18n="mixMultiply">正片叠底混色</button>
+        <div class="chips" role="group" data-i18n-aria="presetMix" aria-label="交集颜色">
+          <button class="chip" type="button" data-mix="custom" data-i18n="mixCustom" aria-pressed="true">自定义</button>
+          <button class="chip" type="button" data-mix="avg" data-i18n="mixAvg" aria-pressed="false">由三圆平均混色</button>
+          <button class="chip" type="button" data-mix="multiply" data-i18n="mixMultiply" aria-pressed="false">正片叠底混色</button>
         </div>
       </div>
     </details>
@@ -121,10 +131,6 @@
     <details class="card sec" open>
       <summary data-i18n="regionsTitle">文字与颜色</summary>
       <div class="sec-body">
-        <div class="region-row region-head">
-          <span data-i18n="colFill">底色</span><span data-i18n="colRegion">区域</span><span data-i18n="colText">文字</span>
-          <span data-i18n="colColor">字色</span><span data-i18n="colSize">字号</span><span data-i18n="colBold">粗</span>
-        </div>
         <div id="regionRows" class="region-list"></div>
         <p class="tip" data-i18n="regionsTip">文字框里按回车可以换行；清空文字即不显示。</p>
       </div>
@@ -134,16 +140,16 @@
       <summary data-i18n="circles">圆圈</summary>
       <div class="sec-body">
         <div id="circleSliders" class="ctl-list"></div>
-        <div class="ctl"><span class="ctl-label" data-i18n="strokeColor">描边颜色</span><input type="color" class="swatch" data-k="strokeColor" data-i18n-aria="strokeColor" aria-label="描边颜色"></div>
+        <div class="ctl"><span class="ctl-label" data-i18n="strokeColor">描边颜色</span><x-color data-k="strokeColor" data-i18n-aria="strokeColor" aria-label="描边颜色"></x-color></div>
       </div>
     </details>
 
     <details class="card sec" open>
       <summary data-i18n="textStyle">文字样式</summary>
       <div class="sec-body">
-        <div class="ctl"><span class="ctl-label" data-i18n="font">字体</span><select id="fontSelect" data-k="font" class="wide" data-i18n-aria="font" aria-label="字体"></select></div>
+        <div class="ctl"><span class="ctl-label" data-i18n="font">字体</span><x-select id="fontSelect" data-k="font" class="wide" data-i18n-aria="font" aria-label="字体"></x-select></div>
         <div id="textSliders" class="ctl-list"></div>
-        <div class="ctl"><span class="ctl-label" data-i18n="strokeColor">描边颜色</span><input type="color" class="swatch" data-k="textStrokeColor" data-i18n-aria="strokeColor" aria-label="描边颜色"></div>
+        <div class="ctl"><span class="ctl-label" data-i18n="strokeColor">描边颜色</span><x-color data-k="textStrokeColor" data-i18n-aria="strokeColor" aria-label="描边颜色"></x-color></div>
         <div class="row-btns"><button class="btn small" type="button" id="resetPos" data-i18n="resetPos">文字归位</button></div>
       </div>
     </details>
@@ -153,12 +159,12 @@
       <div class="sec-body">
         <div class="ctl"><span class="ctl-label" data-i18n="background">背景色</span>
           <div class="ctl-inline">
-            <input type="color" class="swatch" data-k="bg" data-i18n-aria="background" aria-label="背景色">
-            <label class="check"><input type="checkbox" data-k="transparent"> <span data-i18n="transparent">透明背景</span></label>
+            <x-color data-k="bg" data-i18n-aria="background" aria-label="背景色"></x-color>
+            <x-check data-k="transparent"><span data-i18n="transparent">透明背景</span></x-check>
           </div>
         </div>
         <div id="canvasSliders" class="ctl-list"></div>
-        <label class="check"><input type="checkbox" data-k="square"> <span data-i18n="square">正方形画布</span></label>
+        <x-check data-k="square"><span data-i18n="square">正方形画布</span></x-check>
       </div>
     </details>
 
@@ -168,29 +174,29 @@
         <div id="animSliders" class="ctl-list"></div>
         <p class="tip" data-i18n="fpsHint"></p>
         <div class="ctl"><span class="ctl-label" data-i18n="direction">方向</span>
-          <select data-k="anim.dir" data-num class="wide" data-i18n-aria="direction" aria-label="方向">
-            <option value="1" data-i18n="cw">顺时针</option>
-            <option value="-1" data-i18n="ccw">逆时针</option>
-          </select>
+          <x-select data-k="anim.dir" data-num class="wide" data-i18n-aria="direction" aria-label="方向">
+            <x-option value="1" data-i18n="cw">顺时针</x-option>
+            <x-option value="-1" data-i18n="ccw">逆时针</x-option>
+          </x-select>
         </div>
         <div class="ctl"><span class="ctl-label" data-i18n="easing">转速曲线</span>
-          <select data-k="anim.easing" class="wide" data-i18n-aria="easing" aria-label="转速曲线">
-            <option value="outCubic" data-i18n="easeOutCubic">减速停下</option>
-            <option value="outQuint" data-i18n="easeOutQuint">急刹车</option>
-            <option value="inOutCubic" data-i18n="easeInOutCubic">慢 → 快 → 慢</option>
-            <option value="outBack" data-i18n="easeOutBack">冲过头再回弹</option>
-            <option value="linear" data-i18n="easeLinear">匀速</option>
-          </select>
+          <x-select data-k="anim.easing" class="wide" data-i18n-aria="easing" aria-label="转速曲线">
+            <x-option value="outCubic" data-i18n="easeOutCubic">减速停下</x-option>
+            <x-option value="outQuint" data-i18n="easeOutQuint">急刹车</x-option>
+            <x-option value="inOutCubic" data-i18n="easeInOutCubic">慢 → 快 → 慢</x-option>
+            <x-option value="outBack" data-i18n="easeOutBack">冲过头再回弹</x-option>
+            <x-option value="linear" data-i18n="easeLinear">匀速</x-option>
+          </x-select>
         </div>
         <div class="ctl"><span class="ctl-label" data-i18n="centerFx">中心字</span>
-          <select data-k="anim.center" class="wide" data-i18n-aria="centerFx" aria-label="中心字">
-            <option value="pop" data-i18n="fxPop">停下时弹一下</option>
-            <option value="reveal" data-i18n="fxReveal">停下时才蹦出来</option>
-            <option value="none" data-i18n="fxNone">无特效</option>
-          </select>
+          <x-select data-k="anim.center" class="wide" data-i18n-aria="centerFx" aria-label="中心字">
+            <x-option value="pop" data-i18n="fxPop">停下时弹一下</x-option>
+            <x-option value="reveal" data-i18n="fxReveal">停下时才蹦出来</x-option>
+            <x-option value="none" data-i18n="fxNone">无特效</x-option>
+          </x-select>
         </div>
-        <label class="check"><input type="checkbox" data-k="anim.upright"> <span data-i18n="upright">旋转时文字保持正向</span></label>
-        <label class="check"><input type="checkbox" data-k="anim.loop"> <span data-i18n="loop">GIF 无限循环</span></label>
+        <x-check data-k="anim.upright"><span data-i18n="upright">旋转时文字保持正向</span></x-check>
+        <x-check data-k="anim.loop"><span data-i18n="loop">动图无限循环</span></x-check>
         <div class="row-btns">
           <button class="btn" type="button" id="previewAnim" data-i18n="previewAnim">预览动图</button>
           <button class="btn primary" type="button" data-export="gif" data-i18n="makeGif">生成 GIF 动图</button>
@@ -208,6 +214,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="i18n.js"></script>
+<script src="ui.js"></script>
 <script src="gif.js"></script>
 <script src="encoders.js"></script>
 <script src="app.js"></script>
